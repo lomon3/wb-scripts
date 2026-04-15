@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Wildberries Plugin Position Adjustment (Ultimate Fix)
+// @name         Wildberries Plugin Position Adjustment (Ultimate Fix v1.5)
 // @namespace    http://tampermonkey.net/
-// @version      1.4
-// @description  Боковые панели. Полное решение проблемы с зависанием виджетов при переключении товаров.
+// @version      1.5
+// @description  Боковые панели. Полное решение проблемы с зависанием виджетов + Восстановление тултипов диаграммы Маяка.
 // @author       CyberSeller
 // @match        *://*.wildberries.ru/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=wildberries.ru
@@ -12,6 +12,7 @@
 (function() {
     'use strict';
 
+    // --- 1. СТИЛИ ---
     const style = document.createElement('style');
     style.innerHTML = `
         .custom-wb-panel {
@@ -78,9 +79,14 @@
             margin: 10px;
             padding: 10px;
         }
+
+        /* Улучшаем внешний вид столбиков при наведении */
+        .mwb-chart-col { transition: opacity 0.2s; cursor: crosshair; }
+        .mwb-chart-col:hover { opacity: 0.7; }
     `;
     document.head.appendChild(style);
 
+    // --- 2. ЛОГИКА ПАНЕЛЕЙ ---
     function createPanel(side, id) {
         const panel = document.createElement('div');
         panel.id = id;
@@ -122,34 +128,29 @@
     const adjustPosition = () => {
         if (!checkVisibility()) return;
 
-        // Ищем свежий плагин Маяка, который находится ВНЕ нашей левой панели
         const freshLeftPlugin = Array.from(document.querySelectorAll('.mwb-info-block'))
             .find(el => !leftPanelInfo.content.contains(el));
 
         if (freshLeftPlugin) {
-            leftPanelInfo.content.innerHTML = ''; // Стираем старье
-            leftPanelInfo.content.appendChild(freshLeftPlugin); // Забираем свежий
+            leftPanelInfo.content.innerHTML = '';
+            leftPanelInfo.content.appendChild(freshLeftPlugin);
         }
 
-        // Ищем свежий плагин MPStats, который находится ВНЕ нашей правой панели
-        // Ищем сразу по классу и по ID для максимальной надежности
         const freshRightPlugin = Array.from(document.querySelectorAll('.mpstats-sidebar-widget-new, #mpstats-sidebar-widget'))
             .find(el => !rightPanelInfo.content.contains(el));
 
         if (freshRightPlugin) {
-            rightPanelInfo.content.innerHTML = ''; // Стираем зависший плагин
-            rightPanelInfo.content.appendChild(freshRightPlugin); // Забираем актуальный
+            rightPanelInfo.content.innerHTML = '';
+            rightPanelInfo.content.appendChild(freshRightPlugin);
         }
     };
 
-    // Запускаем при загрузке
     window.addEventListener('load', adjustPosition);
 
     let lastUrl = location.href;
     const observer = new MutationObserver(() => {
         const url = location.href;
 
-        // Главная магия: если изменился артикул (URL), принудительно убиваем старые плагины
         if (url !== lastUrl) {
             lastUrl = url;
             leftPanelInfo.content.innerHTML = '';
@@ -161,5 +162,61 @@
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
+
+    // --- 3. СОБСТВЕННЫЙ ТУЛТИП ДЛЯ ДИАГРАММЫ МАЯКА ---
+    // Создаем невидимый блок тултипа, который будет летать за мышкой
+    const customTooltip = document.createElement('div');
+    customTooltip.style.cssText = `
+        position: fixed;
+        background: rgba(30, 30, 30, 0.95);
+        color: #ffffff;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.6;
+        pointer-events: none; /* Чтобы мышка прокликивала тултип насквозь */
+        z-index: 9999999; /* Поверх вообще всего на WB */
+        display: none;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.1);
+        white-space: nowrap;
+        backdrop-filter: blur(4px);
+        font-family: sans-serif;
+    `;
+    document.body.appendChild(customTooltip);
+
+    // Ловим наведение на столбик
+    document.addEventListener('mouseover', (e) => {
+        const col = e.target.closest('.mwb-chart-col');
+        if (col) {
+            const date = col.getAttribute('data-d') || '-';
+            const orders = col.getAttribute('data-o') || '0';
+            const remains = col.getAttribute('data-r') || '0';
+
+            // Наполняем тултип данными
+            customTooltip.innerHTML = `
+                <div style="font-weight: bold; color: #ff9800; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px; margin-bottom: 4px;">📅 ${date}</div>
+                <div>🛒 Продажи: <b>${orders}</b> шт.</div>
+                <div>📦 Остатки: <b>${remains}</b> шт.</div>
+            `;
+            customTooltip.style.display = 'block';
+        }
+    });
+
+    // Двигаем тултип за мышкой
+    document.addEventListener('mousemove', (e) => {
+        if (customTooltip.style.display === 'block') {
+            customTooltip.style.left = (e.clientX + 15) + 'px';
+            customTooltip.style.top = (e.clientY + 15) + 'px';
+        }
+    });
+
+    // Скрываем, когда убираем мышку
+    document.addEventListener('mouseout', (e) => {
+        const col = e.target.closest('.mwb-chart-col');
+        if (col) {
+            customTooltip.style.display = 'none';
+        }
+    });
 
 })();
