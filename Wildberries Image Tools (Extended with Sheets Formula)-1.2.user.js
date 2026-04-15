@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Wildberries Image Tools (Extended with Sheets Formula)
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Кнопки поверх фото: копировать, открыть текущую, открыть все, + ГЕНЕРАЦИЯ ФОРМУЛЫ GOOGLE SHEETS
-// @author       CyberSeller
+// @author       You
 // @match        *://*.wildberries.ru/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=wildberries.ru
 // @grant        none
@@ -78,41 +78,49 @@
 
     // --- 3. НОВЫЙ ФУНКЦИОНАЛ (Генерация формулы Google Sheets) ---
     async function generateAndCopySheetsFormula(btn) {
-        showFeedback(btn, '⏳'); // Показываем статус загрузки
+        showFeedback(btn, '⏳');
         try {
-            // Запрашиваем актуальные апстримы (баскеты)
             const response = await fetch('https://cdn.wbbasket.ru/api/v3/upstreams');
             if (!response.ok) throw new Error('CDN API failure');
             const json = await response.json();
 
-            // Получаем маппинг mediabasket (recommend или origin)
-            const dataRoot = json.recommend || json.origin || json;
-            const routeMap = dataRoot.mediabasket_route_map.find(m => m.method === 'range');
+            // Умный поиск массива баскетов по всему дереву JSON
+            function findBasketMap(obj) {
+                if (!obj || typeof obj !== 'object') return null;
+                if (obj.mediabasket_route_map) return obj.mediabasket_route_map;
+                for (let key in obj) {
+                    const result = findBasketMap(obj[key]);
+                    if (result) return result;
+                }
+                return null;
+            }
+
+            const routeMapArray = findBasketMap(json);
+            if (!routeMapArray) throw new Error('Mediabasket array not found anywhere in JSON');
+
+            const routeMap = routeMapArray.find(m => m.method === 'range');
             if (!routeMap || !routeMap.hosts) throw new Error('Mediabasket route map not found');
 
             const hosts = routeMap.hosts;
 
             let switchConditions = [];
-            // Собираем условия SWITCH на основе полученных данных API
             for (let i = 0; i < hosts.length; i++) {
                 const h = hosts[i];
-                const hostUrl = h.host; // Полный хост (например, basket-01.wbcontent.net)
+                const hostUrl = h.host;
 
                 if (i === 0) {
                     switchConditions.push(`И(b >= 0; b <= ${h.vol_range_to}); "${hostUrl}"`);
                 } else if (i === hosts.length - 1) {
-                    switchConditions.push(`"${hostUrl}"`); // Значение по умолчанию
+                    switchConditions.push(`"${hostUrl}"`);
                 } else {
                     switchConditions.push(`b <= ${h.vol_range_to}; "${hostUrl}"`);
                 }
             }
 
-            // Формируем финальную формулу (артикул берется из ячейки $C3)
             const formula = `=LET(  a; $C3;  b; ЦЕЛОЕ(a / 100000);  targetHost; SWITCH( ИСТИНА; ${switchConditions.join("; ")} );  ГИПЕРССЫЛКА(    "https://www.wildberries.ru/catalog/" & a & "/detail.aspx?targetUrl=GP";    IMAGE(      "https://" & targetHost & "/vol" & b & "/part" & ЦЕЛОЕ(a / 1000) & "/" & a & "/images/big/1.webp"; 1    )  ))`;
 
-            // Копируем в буфер обмена
             await navigator.clipboard.writeText(formula);
-            showFeedback(btn, '📊✅'); // Успех!
+            showFeedback(btn, '📊✅');
 
         } catch (error) {
             console.error('Formula generation error:', error);
@@ -133,7 +141,6 @@
             container.style.position = 'relative';
 
             const btnGroup = document.createElement('div');
-            // Увеличили z-index, чтобы быть поверх лупы WB
             btnGroup.style.cssText = 'position: absolute; top: 12px; right: 12px; z-index: 100000; display: flex; gap: 8px;';
 
             const createBtn = (icon, title, onClick) => {
@@ -168,18 +175,15 @@
                 return btn;
             };
 
-            // Добавляем логику на кнопки
             const btnCopy = createBtn('📋', 'Скопировать фото (в буфер)', (btn) => copyImageToClipboard(img.src, btn));
             const btnCurrent = createBtn('🖼️', 'Открыть это фото', () => window.open(img.src, '_blank'));
             const btnAll = createBtn('📚', 'Открыть все фото товара', () => openAllPhotos());
-
-            // НОВАЯ КНОПКА ГЕНЕРАЦИИ ФОРМУЛЫ
-            const btnFormula = createBtn('📊', 'Генерировать формулу Google Sheets для $C3', (btn) => generateAndCopySheetsFormula(btn));
+            const btnFormula = createBtn('📊', 'Генерировать формулу Google Sheets', (btn) => generateAndCopySheetsFormula(btn));
 
             btnGroup.appendChild(btnCopy);
             btnGroup.appendChild(btnCurrent);
             btnGroup.appendChild(btnAll);
-            btnGroup.appendChild(btnFormula); // Добавляем четвертой
+            btnGroup.appendChild(btnFormula);
 
             container.appendChild(btnGroup);
         });
