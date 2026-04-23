@@ -6,6 +6,8 @@
 // @author       You
 // @match        *://*.wildberries.ru/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=wildberries.ru
+// @updateURL    https://github.com/lomon3/wb-scripts/raw/refs/heads/main/Wildberries%20Image%20Tools%20(Extended%20with%20Sheets%20Formula)-1.2.user.js
+// @downloadURL  https://github.com/lomon3/wb-scripts/raw/refs/heads/main/Wildberries%20Image%20Tools%20(Extended%20with%20Sheets%20Formula)-1.2.user.js
 // @grant        GM_download
 // ==/UserScript==
 
