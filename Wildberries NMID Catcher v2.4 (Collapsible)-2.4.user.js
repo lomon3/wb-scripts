@@ -7,6 +7,8 @@
 // @match        https://www.wildberries.ru/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=wildberries.ru
 // @grant        none
+// @updateURL    https://github.com/lomon3/wb-scripts/raw/refs/heads/main/Wildberries%20NMID%20Catcher%20v2.4%20(Collapsible)-2.4.user.js
+// @downloadURL  https://github.com/lomon3/wb-scripts/raw/refs/heads/main/Wildberries%20NMID%20Catcher%20v2.4%20(Collapsible)-2.4.user.js
 // ==/UserScript==
 
 console.log('🔥 CyberSeller NM Catcher v2.4: Init');
