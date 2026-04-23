@@ -7,6 +7,8 @@
 // @match        *://*.wildberries.ru/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=wildberries.ru
 // @grant        none
+// @updateURL    https://github.com/lomon3/wb-scripts/raw/refs/heads/main/Wildberries%20Plugin%20Position%20Adjustment%20(Ultimate%20Fix)-1.4.user.js
+// @downloadURL  https://github.com/lomon3/wb-scripts/raw/refs/heads/main/Wildberries%20Plugin%20Position%20Adjustment%20(Ultimate%20Fix)-1.4.user.js
 // ==/UserScript==
 
 (function() {
