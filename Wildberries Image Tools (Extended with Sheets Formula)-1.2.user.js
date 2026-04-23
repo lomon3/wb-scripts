@@ -1,18 +1,18 @@
 // ==UserScript==
-// @name         Wildberries Image Tools (Extended with Sheets Formula)
+// @name         Wildberries Image Tools (Extended + Native Download)
 // @namespace    http://tampermonkey.net/
-// @version      1.3
-// @description  Кнопки поверх фото: копировать, открыть текущую, открыть все, + ГЕНЕРАЦИЯ ФОРМУЛЫ GOOGLE SHEETS
+// @version      1.5
+// @description  Кнопки: копировать, открыть, открыть все, формула, СКАЧАТЬ (через GM_download)
 // @author       You
 // @match        *://*.wildberries.ru/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=wildberries.ru
-// @grant        none
+// @grant        GM_download
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // --- 1. Старый функционал (Открыть все фото) ---
+    // --- 1. Открыть все фото ---
     function openAllPhotos() {
         const m = window.location.href.match(/catalog\/(\d+)/);
         let id = m ? m[1] : null;
@@ -37,7 +37,7 @@
         }
     }
 
-    // --- 2. Старый функционал (Копирование WebP как PNG) ---
+    // --- 2. Копирование WebP как PNG ---
     async function copyImageToClipboard(src, btn) {
         try {
             const img = new Image();
@@ -76,7 +76,7 @@
         setTimeout(() => { btn.innerText = oldText; }, 1500);
     }
 
-    // --- 3. НОВЫЙ ФУНКЦИОНАЛ (Генерация формулы Google Sheets) ---
+    // --- 3. Генерация формулы Google Sheets ---
     async function generateAndCopySheetsFormula(btn) {
         showFeedback(btn, '⏳');
         try {
@@ -84,7 +84,6 @@
             if (!response.ok) throw new Error('CDN API failure');
             const json = await response.json();
 
-            // Умный поиск массива баскетов по всему дереву JSON
             function findBasketMap(obj) {
                 if (!obj || typeof obj !== 'object') return null;
                 if (obj.mediabasket_route_map) return obj.mediabasket_route_map;
@@ -96,18 +95,17 @@
             }
 
             const routeMapArray = findBasketMap(json);
-            if (!routeMapArray) throw new Error('Mediabasket array not found anywhere in JSON');
+            if (!routeMapArray) throw new Error('Mediabasket array not found');
 
             const routeMap = routeMapArray.find(m => m.method === 'range');
             if (!routeMap || !routeMap.hosts) throw new Error('Mediabasket route map not found');
 
             const hosts = routeMap.hosts;
-
             let switchConditions = [];
+
             for (let i = 0; i < hosts.length; i++) {
                 const h = hosts[i];
                 const hostUrl = h.host;
-
                 if (i === 0) {
                     switchConditions.push(`И(b >= 0; b <= ${h.vol_range_to}); "${hostUrl}"`);
                 } else if (i === hosts.length - 1) {
@@ -125,11 +123,44 @@
         } catch (error) {
             console.error('Formula generation error:', error);
             showFeedback(btn, '❌');
-            alert('Не удалось сгенерировать формулу. Проверьте консоль.');
         }
     }
 
-    // --- 4. Внедрение UI в карточки товара ---
+    // --- 4. НОВЫЙ ФУНКЦИОНАЛ: Скачивание через Tampermonkey ---
+    function downloadImage(src, btn) {
+        showFeedback(btn, '⏳');
+
+        // Ищем артикул и номер фото
+        const match = src.match(/\/(\d+)\/images\/big\/(\d+)\.webp/);
+        let filename = 'image.webp';
+
+        if (match) {
+            const articleId = match[1];
+            const imgNum = match[2];
+            filename = `${articleId}_${imgNum}.webp`; // Например: 799605507_3.webp
+        } else {
+            const urlMatch = window.location.href.match(/catalog\/(\d+)/);
+            if (urlMatch) filename = `${urlMatch[1]}.webp`;
+        }
+
+        // Используем встроенный менеджер загрузок Tampermonkey
+        GM_download({
+            url: src,
+            name: filename,
+            saveAs: false, // false = качать сразу в папку Загрузки, true = спросить куда сохранить
+            onload: function() {
+                showFeedback(btn, '💾✅');
+            },
+            onerror: function(error) {
+                console.error('GM_download error:', error);
+                showFeedback(btn, '❌');
+                // Запасной план, если что-то пошло не так
+                window.open(src, '_blank');
+            }
+        });
+    }
+
+    // --- 5. Внедрение UI ---
     function injectButtons() {
         const containers = document.querySelectorAll('.imageContainer--TnaxW:not(.has-wb-tools), .zoomImage--Nlxie:not(.has-wb-tools)');
 
@@ -141,7 +172,7 @@
             container.style.position = 'relative';
 
             const btnGroup = document.createElement('div');
-            btnGroup.style.cssText = 'position: absolute; top: 12px; right: 12px; z-index: 100000; display: flex; gap: 8px;';
+            btnGroup.style.cssText = 'position: absolute; top: 12px; right: 12px; z-index: 100000; display: flex; gap: 6px;';
 
             const createBtn = (icon, title, onClick) => {
                 const btn = document.createElement('button');
@@ -150,11 +181,11 @@
                 btn.style.cssText = `
                     background: rgba(255, 255, 255, 0.9);
                     border: 1px solid rgba(0,0,0,0.1);
-                    border-radius: 8px;
-                    width: 36px;
-                    height: 36px;
+                    border-radius: 6px;
+                    width: 32px;
+                    height: 32px;
                     cursor: pointer;
-                    font-size: 18px;
+                    font-size: 16px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
@@ -177,13 +208,15 @@
 
             const btnCopy = createBtn('📋', 'Скопировать фото (в буфер)', (btn) => copyImageToClipboard(img.src, btn));
             const btnCurrent = createBtn('🖼️', 'Открыть это фото', () => window.open(img.src, '_blank'));
-            const btnAll = createBtn('📚', 'Открыть все фото товара', () => openAllPhotos());
+            const btnAll = createBtn('📚', 'Открыть все фото', () => openAllPhotos());
             const btnFormula = createBtn('📊', 'Генерировать формулу Google Sheets', (btn) => generateAndCopySheetsFormula(btn));
+            const btnDownload = createBtn('💾', 'Скачать файл с именем артикула', (btn) => downloadImage(img.src, btn));
 
             btnGroup.appendChild(btnCopy);
             btnGroup.appendChild(btnCurrent);
             btnGroup.appendChild(btnAll);
             btnGroup.appendChild(btnFormula);
+            btnGroup.appendChild(btnDownload);
 
             container.appendChild(btnGroup);
         });
